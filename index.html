@@ -1,0 +1,1302 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="meDRA: demo animada de minería de texto sobre una cadena de razonamiento (traza simulada).">
+<style>
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
+<title>meDRA Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: control bar on top; board of two columns — switchable visualisations (Conceptos / Pasos) left, streaming chain-of-thought right */
+:root {
+  --bg: #F5F5FA;
+  --surface: #FFFFFF;
+  --surface-2: #F0EFF7;
+  --line: #E3E1EE;
+  --fg: #17162B;
+  --muted: #6A6884;
+  --link: #CBC6EC;
+  --login: #6247E5;
+  --form: #2D7BE6;
+  --sesion: #13A184;
+  --seg: #E48A12;
+  --on-c: #FFFFFF;
+  --shadow: 0 1px 2px rgba(23, 22, 43, .04), 0 6px 20px rgba(23, 22, 43, .05);
+  --font-ui: 'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E0E18; --surface: #171726; --surface-2: #1F1F33; --line: #2B2A42;
+    --fg: #ECEBF7; --muted: #9D9BB8; --link: #45406F;
+    --login: #8E78FF; --form: #5C9CFF; --sesion: #2FC6A5; --seg: #F4A53C; --on-c: #FFFFFF;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E0E18; --surface: #171726; --surface-2: #1F1F33; --line: #2B2A42;
+  --fg: #ECEBF7; --muted: #9D9BB8; --link: #45406F;
+  --login: #8E78FF; --form: #5C9CFF; --sesion: #2FC6A5; --seg: #F4A53C; --on-c: #FFFFFF;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+
+body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 15px; }
+button { font-family: inherit; }
+:focus-visible { outline: 2px solid var(--login); outline-offset: 2px; }
+
+.app {
+  max-width: 1440px; margin: 0 auto;
+  padding-block: 18px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 14px;
+}
+
+/* ---------- top bar ---------- */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
+.brand { display: flex; align-items: center; gap: 12px; margin-right: auto; min-width: 0; }
+.brand svg { flex: none; }
+.logo { font-size: 26px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+.logo span { color: var(--login); }
+.tagline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13.5px; color: var(--muted); margin-top: 3px; }
+.pill {
+  font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--seg) 80%, var(--fg));
+  background: color-mix(in srgb, var(--seg) 13%, var(--surface));
+  padding: 3px 8px; border-radius: 999px;
+}
+
+.tabs { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 2px; }
+.tabs button {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 600; color: var(--muted);
+  background: transparent; border: 0; padding: 8px 16px; border-radius: 9px; cursor: pointer;
+}
+.tabs button svg { opacity: .8; }
+.tabs button[aria-selected="true"] { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
+
+.player {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 5px 10px 5px 5px;
+}
+.icon-btn {
+  width: 34px; height: 34px; flex: none; border-radius: 9px; border: 0; cursor: pointer;
+  display: grid; place-items: center; background: var(--login); color: var(--on-c);
+}
+.icon-btn.ghost { background: var(--surface-2); color: var(--fg); }
+.theme-btn { width: 44px; height: 44px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+#scrub { width: 170px; accent-color: var(--login); }
+.pos { font: 500 12px var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 66px; }
+.speed { display: flex; gap: 2px; background: var(--surface-2); border-radius: 8px; padding: 2px; }
+.speed button {
+  font: 500 12px var(--font-mono); color: var(--muted); background: transparent; border: 0;
+  padding: 4px 7px; border-radius: 6px; cursor: pointer;
+}
+.speed button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
+
+/* ---------- board ---------- */
+.board { display: grid; grid-template-columns: minmax(0, 1.72fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+  padding: 18px 20px; box-shadow: var(--shadow); min-width: 0;
+}
+.card h2 { font-size: 21px; font-weight: 700; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+.sub { margin: 3px 0 0; font-size: 14px; color: var(--muted); }
+.view { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.svgwrap { position: relative; }
+.svgwrap > svg { display: block; width: 100%; height: auto; font-family: var(--font-ui); user-select: none; }
+.scroll { overflow-x: auto; }
+.scroll > svg { min-width: 640px; }
+.hint { font-size: 14px; color: var(--muted); margin: 8px 0 0; min-height: 1.45em; line-height: 1.45; }
+.hint b { color: var(--fg); font-weight: 700; }
+.hint .sw { color: color-mix(in srgb, var(--c) 78%, var(--fg)); font-weight: 700; }
+
+/* concept map */
+.node { cursor: pointer; transition: opacity .3s; }
+.node .body { fill: color-mix(in srgb, var(--c) 13%, var(--surface)); stroke: color-mix(in srgb, var(--c) 50%, var(--surface)); stroke-width: 2.5; transition: fill .25s; }
+.node .lbl { fill: var(--fg); font-weight: 650; pointer-events: none; transition: fill .25s; }
+.node:hover .body { stroke: var(--c); }
+.node.sel .body { fill: var(--c); stroke: color-mix(in srgb, var(--c) 30%, var(--surface)); stroke-width: 9; }
+.node.sel .lbl { fill: var(--on-c); }
+.node.dim { opacity: .26; }
+.node .pulse { fill: none; stroke: var(--c); stroke-width: 3; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.node .pulse.go { animation: pulse .9s ease-out; }
+@keyframes pulse { from { opacity: .7; transform: scale(1); } to { opacity: 0; transform: scale(1.45); } }
+.edge { stroke: var(--c); stroke-opacity: .55; stroke-linecap: round; transition: stroke-opacity .3s; }
+.edge.dim { stroke-opacity: .1; }
+.edge.on { stroke-opacity: .9; }
+
+/* topic chart */
+.c-grid { stroke: var(--line); stroke-width: 1; }
+.c-tramo { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; }
+.c-axis { fill: var(--muted); font-size: 13px; }
+.c-ytitle { fill: var(--muted); font-size: 12px; }
+.c-area { fill: var(--c); fill-opacity: .17; transition: fill-opacity .25s; }
+.c-line { fill: none; stroke: var(--c); stroke-width: 2.2; stroke-linejoin: round; transition: stroke-opacity .25s; }
+.c-area.dim { fill-opacity: .05; }
+.c-line.dim { stroke-opacity: .28; }
+.c-area.on { fill-opacity: .3; }
+.c-line.on { stroke-width: 3; }
+.c-band { fill: var(--c); fill-opacity: .13; }
+.c-peak line { stroke: var(--c); stroke-width: 2; stroke-dasharray: 5 4; }
+.c-peak circle { fill: var(--c); stroke: var(--surface); stroke-width: 3; }
+.c-peak rect { fill: var(--surface); stroke: var(--c); stroke-width: 1.5; }
+.c-peak text { fill: var(--fg); font-size: 13px; font-weight: 600; }
+.c-now { stroke: var(--muted); stroke-opacity: .55; stroke-dasharray: 2 4; }
+.c-hover { stroke: var(--fg); stroke-opacity: .3; }
+.c-rug line { stroke: var(--c); stroke-width: 3.5; stroke-linecap: round; }
+#chart { cursor: crosshair; }
+.tip {
+  position: absolute; top: 4px; transform: translateX(-50%); z-index: 2; pointer-events: none;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 8px 10px; font-size: 12.5px; min-width: 160px;
+}
+.tip .t-head { font-weight: 700; margin-bottom: 4px; }
+.tip .t-row { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.tip .t-row span:last-child { margin-left: auto; font-family: var(--font-mono); color: var(--muted); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
+
+.legend-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-top: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px; }
+.legend button {
+  display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 500; color: var(--fg);
+  background: transparent; border: 0; border-radius: 999px; padding: 5px 11px; cursor: pointer;
+}
+.legend button:hover { background: var(--surface-2); }
+.legend button[aria-pressed="true"] { background: color-mix(in srgb, var(--c) 15%, var(--surface)); font-weight: 700; color: color-mix(in srgb, var(--c) 72%, var(--fg)); }
+.selinfo { font-size: 14px; color: var(--muted); }
+.selinfo b { color: color-mix(in srgb, var(--c, var(--fg)) 75%, var(--fg)); }
+
+/* steps graph */
+.s-track { stroke: var(--line); stroke-width: 4; stroke-linecap: round; }
+.s-arrow { fill: none; stroke: var(--c); stroke-width: 3; }
+.s-mk { fill: color-mix(in srgb, var(--c) 70%, var(--fg)); font: 500 12.5px var(--font-mono); text-anchor: middle; }
+.s-node { cursor: pointer; }
+.s-node .core { fill: var(--c); }
+.s-node .num { fill: var(--on-c); font-weight: 700; font-size: 20px; text-anchor: middle; pointer-events: none; }
+.s-node .halo { fill: none; stroke: var(--c); stroke-opacity: .25; stroke-width: 9; opacity: 0; transition: opacity .3s; }
+.s-node.sel .halo { opacity: 1; stroke-opacity: .4; }
+.s-node.live .halo { opacity: 1; animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe { 50% { stroke-opacity: .05; } }
+.s-name { fill: var(--fg); font-weight: 700; font-size: 19px; text-anchor: middle; }
+.s-meta { fill: var(--muted); font: 400 12px var(--font-mono); text-anchor: middle; }
+.s-link { stroke: var(--c); stroke-opacity: .4; stroke-width: 1.5; }
+.s-sat { cursor: pointer; }
+.s-sat circle { fill: color-mix(in srgb, var(--c) 15%, var(--surface)); stroke: var(--c); stroke-width: 2; transition: r .3s; }
+.s-sat.sel circle { fill: var(--c); }
+.s-sat text { fill: var(--fg); font-size: 13px; font-weight: 600; text-anchor: middle; }
+.s-arc path { fill: none; stroke: var(--c); stroke-width: 2; stroke-dasharray: 6 5; }
+.s-arc rect { fill: var(--surface); stroke: var(--c); stroke-width: 1.2; }
+.s-arc text { fill: var(--fg); font-size: 12.5px; font-weight: 600; text-anchor: middle; }
+.s-start { fill: var(--muted); }
+.s-start-lbl { fill: var(--muted); font-size: 12.5px; text-anchor: middle; }
+.fade { transition: opacity .45s; }
+.off { opacity: 0; pointer-events: none; }
+.s-node.dim, .s-sat.dim { opacity: .3; }
+
+/* step detail */
+.sd-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.sd-num {
+  width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: var(--c); color: var(--on-c); font-weight: 800; font-size: 19px;
+}
+.sd-head h3 { margin: 0; font-size: 20px; font-weight: 700; }
+.sd-head p { margin: 1px 0 0; font: 400 12.5px var(--font-mono); color: var(--muted); }
+.sd-tag { margin-left: auto; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); padding: 4px 9px; border-radius: 999px; }
+.sd-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px 28px; margin-top: 16px; }
+.sd-grid h4 { margin: 0 0 8px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.sd-block + .sd-block { margin-top: 14px; }
+.bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.bars li { display: grid; grid-template-columns: 104px minmax(0, 1fr) 42px; align-items: center; gap: 10px; font-size: 14px; }
+.bars li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bars li .bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.bars li .bar i { display: block; height: 100%; border-radius: 4px; background: var(--c); transition: width .4s; }
+.bars li b { font: 500 12.5px var(--font-mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--fg);
+  background: color-mix(in srgb, var(--c) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--c) 35%, var(--surface));
+  border-radius: 999px; padding: 4px 10px; cursor: pointer;
+}
+.chip small { font: 500 11.5px var(--font-mono); color: var(--muted); }
+.mkq { font-weight: 700; color: color-mix(in srgb, var(--c) 75%, var(--fg)); }
+.sd-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--fg); }
+
+/* ---------- text panel ---------- */
+.text-card { position: relative; padding: 0; min-height: 560px; }
+.text-inner { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 18px 20px 14px; }
+.model { display: flex; align-items: center; gap: 9px; margin: 16px 0 12px; font-size: 14.5px; }
+.model b { font-weight: 700; }
+.model .state { color: var(--muted); }
+.model .state.live::after { content: ""; display: inline-block; width: 1.2em; text-align: left; animation: dots 1.2s steps(4) infinite; }
+@keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+.trace { flex: 1 1 auto; min-height: 0; overflow-y: auto; position: relative; padding-right: 6px; }
+.para {
+  margin: 0 0 14px; padding: 8px 12px 8px 14px; border-left: 2px solid var(--line); border-radius: 0 10px 10px 0;
+  font-size: 15.5px; line-height: 1.62; color: color-mix(in srgb, var(--fg) 82%, var(--muted));
+  transition: background .3s, border-color .3s;
+}
+.para.sel { background: color-mix(in srgb, var(--c) 11%, var(--surface)); border-left-color: var(--c); }
+.v-pasos .para::before {
+  content: attr(data-label); display: block; margin-bottom: 3px;
+  font: 600 11px var(--font-mono); letter-spacing: .05em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--c) 75%, var(--fg));
+}
+.v-pasos .para .mk { background: color-mix(in srgb, var(--c) 16%, var(--surface)); border-radius: 4px; padding: 0 3px; font-weight: 700; }
+.w.hide { display: none; }
+.m {
+  cursor: pointer; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--c) 45%, transparent);
+}
+.m.hl { font-weight: 700; color: color-mix(in srgb, var(--c) 72%, var(--fg)); text-decoration-color: var(--c); }
+.m.hl.strong { background: color-mix(in srgb, var(--c) 18%, var(--surface)); border-radius: 4px; text-decoration: none; }
+.m.new { animation: flash 1.1s ease-out; }
+@keyframes flash { from { background: color-mix(in srgb, var(--c) 35%, var(--surface)); } to { background: transparent; } }
+.caret { display: inline-block; width: 2px; height: 1.05em; background: var(--fg); vertical-align: -2px; margin-left: 1px; animation: blink 1s steps(1) infinite; }
+.caret.done { display: none; }
+@keyframes blink { 50% { opacity: 0; } }
+.proc { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; }
+.proc h4 { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ticker { display: flex; flex-direction: column; gap: 3px; min-height: 60px; font: 400 12.5px var(--font-mono); }
+.ticker div { display: flex; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.ticker div:first-child { color: var(--fg); }
+.ticker em { font-style: normal; color: color-mix(in srgb, var(--c, var(--muted)) 75%, var(--fg)); font-weight: 600; }
+.stats { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; font: 400 12px var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.stats b { color: var(--fg); font-weight: 600; }
+
+@media (max-width: 980px) {
+  .board { grid-template-columns: minmax(0, 1fr); }
+  .text-card { min-height: 0; }
+  .text-inner { position: static; }
+  .trace { max-height: 380px; }
+  .sd-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .player { width: 100%; }
+  #scrub { flex: 1; width: auto; min-width: 0; }
+  .card { padding: 14px 14px; }
+  .text-inner { padding: 14px; }
+  .bars li { grid-template-columns: 88px minmax(0, 1fr) 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand">
+      <svg width="38" height="38" viewBox="0 0 38 38" aria-hidden="true">
+        <line x1="12" y1="24" x2="25" y2="11" style="stroke: var(--link)" stroke-width="2.5"/>
+        <line x1="12" y1="24" x2="28" y2="28" style="stroke: var(--link)" stroke-width="2.5"/>
+        <circle cx="12" cy="24" r="8" style="fill: var(--login)"/>
+        <circle cx="26" cy="10" r="5" style="fill: var(--seg)"/>
+        <circle cx="29" cy="28" r="5.5" style="fill: var(--sesion)"/>
+      </svg>
+      <div>
+        <div class="logo">me<span>DRA</span></div>
+        <div class="tagline">Mapa del razonamiento expresado <span class="pill">Demo · traza simulada</span></div>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Visualización">
+      <button role="tab" id="tab-conceptos" aria-selected="true" aria-controls="view-conceptos" data-view="conceptos">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="9" r="3.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="4.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        Conceptos
+      </button>
+      <button role="tab" id="tab-pasos" aria-selected="false" aria-controls="view-pasos" data-view="pasos">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="2.2" fill="currentColor"/><circle cx="13" cy="8" r="2.2" fill="currentColor"/><path d="M5.5 8h4.5M8.5 5.8 10.8 8l-2.3 2.2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        Pasos
+      </button>
+    </div>
+
+    <div class="player">
+      <button class="icon-btn" id="btn-play" aria-label="Pausar"></button>
+      <button class="icon-btn ghost" id="btn-restart" aria-label="Reiniciar">
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 5V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
+      </button>
+      <input type="range" id="scrub" min="0" max="100" step="1" value="0" aria-label="Posición en la traza">
+      <span class="pos" id="pos">0/0</span>
+      <div class="speed" id="speed" role="group" aria-label="Velocidad">
+        <button data-s="0.5" aria-pressed="false">0.5×</button>
+        <button data-s="1" aria-pressed="true">1×</button>
+        <button data-s="2" aria-pressed="false">2×</button>
+        <button data-s="4" aria-pressed="false">4×</button>
+      </div>
+    </div>
+    <button class="icon-btn ghost theme-btn" id="btn-theme" aria-label="Cambiar a modo oscuro"></button>
+  </header>
+
+  <main class="board">
+    <section class="viz" aria-label="Visualizaciones">
+      <div class="view" id="view-conceptos" role="tabpanel" aria-labelledby="tab-conceptos">
+        <article class="card">
+          <h2>Conceptos y menciones</h2>
+          <p class="sub">Tamaño = menciones · Enlace = coocurrencia en la misma frase</p>
+          <div class="svgwrap scroll"><svg id="map" viewBox="0 0 1000 460" role="img" aria-label="Mapa de conceptos"></svg></div>
+          <p class="hint" id="map-info">Selecciona un término para ver sus menciones.</p>
+        </article>
+        <article class="card">
+          <h2>Temas a lo largo de la traza</h2>
+          <p class="sub">Densidad de menciones por tema (ventana de ±6 palabras). Haz clic en una curva para seleccionarla.</p>
+          <div class="svgwrap scroll" id="chart-wrap">
+            <svg id="chart" viewBox="0 0 1000 240" role="img" aria-label="Temas a lo largo de la traza"></svg>
+            <div class="tip" id="tip" hidden></div>
+          </div>
+          <div class="legend-row">
+            <div class="legend" id="legend"></div>
+            <div class="selinfo" id="selinfo">Selección: <b>ninguna</b></div>
+          </div>
+        </article>
+      </div>
+
+      <div class="view" id="view-pasos" role="tabpanel" aria-labelledby="tab-pasos" hidden>
+        <article class="card">
+          <h2>Pasos del agente</h2>
+          <p class="sub">Un paso por tramo, separado por marcadores del discurso. Flecha = orden · arco discontinuo = concepto retomado</p>
+          <div class="svgwrap scroll"><svg id="steps" viewBox="0 0 1000 370" role="img" aria-label="Grafo de pasos"></svg></div>
+          <p class="hint" id="steps-note"></p>
+        </article>
+        <article class="card" id="step-detail"></article>
+      </div>
+    </section>
+
+    <aside class="card text-card" aria-label="Texto original">
+      <div class="text-inner">
+        <h2>Texto original</h2>
+        <p class="sub">Traza de ejemplo</p>
+        <div class="model">
+          <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="6" style="fill: var(--form)"/><path d="M6 12.5c1.6-3 3.2-3 4.8 0s3.2 3 4.8 0" fill="none" style="stroke: var(--on-c)" stroke-width="2" stroke-linecap="round"/></svg>
+          <b>DeepSeek</b><span class="state live" id="think">Pensando</span>
+        </div>
+        <div class="trace" id="trace" aria-live="off"></div>
+        <div class="proc">
+          <h4>Procesando ahora</h4>
+          <div class="ticker" id="ticker"></div>
+          <div class="stats" id="stats"></div>
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ================= data: the illustrative trace ================= */
+const TEXT = [
+  'Vale, el usuario quiere una página de login. Necesito un formulario con email y contraseña. ¿Hace falta registro también? Por ahora me centraré en el inicio de sesión: el login es la pieza principal y el registro puede venir después.',
+  'Primero los campos. El email debe tener un formato válido y ninguno puede quedar vacío. Quizá convenga mostrar el error junto al campo, sin borrar lo que ya se ha escrito. El botón de login se desactiva hasta que la validación pase.',
+  'Espera, falta la seguridad. La contraseña no debería almacenarse en texto plano; necesito un hash y la comprobación debe hacerse en el servidor. Además, si el login falla, el mensaje no debe revelar si el email existe.',
+  'Después está la sesión. Podría usar JWT, aunque una cookie de sesión también serviría. Depende del backend. Tengo que revisar cómo mantener la sesión y cuándo caduca. Si el JWT caduca, el login vuelve a pedir la contraseña.'
+];
+
+const TOPICS = [
+  { id: 'login', name: 'Login', v: '--login' },
+  { id: 'form', name: 'Formulario', v: '--form' },
+  { id: 'sesion', name: 'Sesión', v: '--sesion' },
+  { id: 'seg', name: 'Seguridad', v: '--seg' },
+];
+const topicById = Object.fromEntries(TOPICS.map(t => [t.id, t]));
+
+// x, y = resting position on the concept map
+const CONCEPTS = [
+  { id: 'login', name: 'Login', topic: 'login', x: 480, y: 228 },
+  { id: 'registro', name: 'Registro', topic: 'login', x: 430, y: 395 },
+  { id: 'formulario', name: 'Formulario', topic: 'form', x: 292, y: 100 },
+  { id: 'email', name: 'Email', topic: 'form', x: 100, y: 170 },
+  { id: 'validacion', name: 'Validación', topic: 'form', x: 225, y: 325 },
+  { id: 'contrasena', name: 'Contraseña', topic: 'seg', x: 690, y: 100 },
+  { id: 'hash', name: 'Hash', topic: 'seg', x: 880, y: 66 },
+  { id: 'servidor', name: 'Servidor', topic: 'seg', x: 895, y: 196 },
+  { id: 'sesion', name: 'Sesión', topic: 'sesion', x: 698, y: 318 },
+  { id: 'jwt', name: 'JWT', topic: 'sesion', x: 895, y: 335 },
+  { id: 'cookie', name: 'Cookie', topic: 'sesion', x: 800, y: 418 },
+];
+const conceptById = Object.fromEntries(CONCEPTS.map(c => [c.id, c]));
+
+// lematización (only the inflected forms that occur in the trace)
+const LEMMA = {
+  quiere: 'querer', necesito: 'necesitar', hace: 'hacer', falta: 'faltar', 'centraré': 'centrar', es: 'ser',
+  puede: 'poder', campos: 'campo', debe: 'deber', 'válido': 'validar', 'validación': 'validar', convenga: 'convenir',
+  ha: 'haber', escrito: 'escribir', desactiva: 'desactivar', pase: 'pasar', espera: 'esperar', 'debería': 'deber',
+  almacenarse: 'almacenar', hacerse: 'hacer', falla: 'fallar', existe: 'existir', 'está': 'estar', 'podría': 'poder',
+  'serviría': 'servir', depende: 'depender', tengo: 'tener', caduca: 'caducar', vuelve: 'volver',
+};
+// lemma -> concept (agrupación: synonyms and parts collapse into one concept)
+const CONCEPT_OF = {
+  login: 'login', registro: 'registro', formulario: 'formulario', campo: 'formulario', 'botón': 'formulario',
+  email: 'email', validar: 'validacion', 'vacío': 'validacion', error: 'validacion', 'contraseña': 'contrasena',
+  hash: 'hash', servidor: 'servidor', backend: 'servidor', 'sesión': 'sesion', jwt: 'jwt', cookie: 'cookie',
+};
+// n-gramas
+const MULTI = [
+  { words: ['inicio', 'de', 'sesión'], concept: 'login' },
+  { words: ['texto', 'plano'], term: 'texto plano' },
+];
+// topic words that are not concepts on the map
+const TOPIC_EXTRA = { seguridad: 'seg', 'texto plano': 'seg', 'comprobación': 'seg', caducar: 'sesion' };
+const STOP = new Set(('vale el la los las lo le un una uno unos de del al a y o con en por para que me se ya no si sí ' +
+  'también ahora hacer faltar ser estar haber poder deber tener necesitar querer centrar pieza principal venir después ' +
+  'primero esperar quizá convenir mostrar junto sin hasta pasar además ninguno quedar escribir usar aunque servir ' +
+  'depender cómo cuándo volver pedir').split(' '));
+const MARKERS = {
+  vale: { label: 'Vale', tipo: 'arranque', desc: 'Abre el razonamiento: el agente interpreta la petición.' },
+  primero: { label: 'Primero', tipo: 'enumeración', desc: 'Empieza a descomponer la tarea en partes ordenadas.' },
+  espera: { label: 'Espera', tipo: 'autocorrección', desc: 'El agente se interrumpe para revisar algo que había pasado por alto.' },
+  'después': { label: 'Después', tipo: 'transición', desc: 'Cierra el tema anterior y pasa al siguiente.' },
+};
+
+/* ================= text mining (precomputed over the full trace) ================= */
+const tokens = [];
+const tramos = [];
+let sentence = 0;
+TEXT.forEach((para, t) => {
+  const start = tokens.length;
+  para.split(/\s+/).forEach(w => {
+    const norm = w.toLowerCase().replace(/^[¿¡«"(]+/, '').replace(/[.,;:?!»")…]+$/, '');
+    tokens.push({ i: tokens.length, text: w, norm, lemma: LEMMA[norm] || norm, tramo: t, sentence });
+    if (/[.?!]$/.test(w)) sentence++;
+  });
+  tramos.push({ start, end: tokens.length });
+});
+const N = tokens.length;
+
+const mentions = [];
+const occ = []; // term occurrences for TF-IDF
+for (let i = 0; i < N; i++) {
+  const tk = tokens[i];
+  let m = null;
+  for (const mw of MULTI) {
+    if (mw.words.every((w, k) => tokens[i + k] && tokens[i + k].norm === w)) {
+      const end = i + mw.words.length - 1;
+      m = { concept: mw.concept || null, term: mw.concept || mw.term, start: i, end,
+            form: tokens.slice(i, end + 1).map(x => x.norm).join(' ') };
+      break;
+    }
+  }
+  if (!m) {
+    const c = CONCEPT_OF[tk.lemma];
+    if (c) m = { concept: c, term: c, start: i, end: i, form: tk.norm };
+    else if (TOPIC_EXTRA[tk.lemma]) m = { concept: null, term: tk.lemma, start: i, end: i, form: tk.norm };
+  }
+  if (m) {
+    m.topic = m.concept ? conceptById[m.concept].topic : TOPIC_EXTRA[m.term];
+    m.tramo = tk.tramo; m.sentence = tk.sentence; m.id = mentions.length;
+    for (let k = m.start; k <= m.end; k++) tokens[k].m = m;
+    mentions.push(m);
+    occ.push({ term: m.term, pos: m.end, tramo: tk.tramo });
+    i = m.end;
+    continue;
+  }
+  if (!STOP.has(tk.lemma) && tk.lemma.length > 2) occ.push({ term: tk.lemma, pos: i, tramo: tk.tramo });
+}
+const termName = t => conceptById[t] ? conceptById[t].name : t;
+
+function conceptCounts(n) {
+  const c = {};
+  for (const m of mentions) if (m.concept && m.end < n) c[m.concept] = (c[m.concept] || 0) + 1;
+  return c;
+}
+function pairCounts(n) {
+  const bySent = new Map();
+  for (const m of mentions) {
+    if (!m.concept || m.end >= n) continue;
+    if (!bySent.has(m.sentence)) bySent.set(m.sentence, new Set());
+    bySent.get(m.sentence).add(m.concept);
+  }
+  const pc = {};
+  for (const set of bySent.values()) {
+    const a = [...set].sort();
+    for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++) {
+      const k = a[i] + '|' + a[j];
+      pc[k] = (pc[k] || 0) + 1;
+    }
+  }
+  return pc;
+}
+const SIG = 6;
+function curve(topic, n) {
+  const ps = mentions.filter(m => m.topic === topic && m.end < n).map(m => (m.start + m.end) / 2);
+  const arr = new Array(Math.max(n, 0)).fill(0);
+  for (let x = 0; x < n; x++) for (const p of ps) { const d = x - p; arr[x] += Math.exp(-d * d / (2 * SIG * SIG)); }
+  return arr;
+}
+function tfidf(n) {
+  const docs = tramos.map(() => ({ tf: {}, first: {}, len: 0 }));
+  occ.forEach((o, k) => {
+    if (o.pos >= n) return;
+    const d = docs[o.tramo];
+    d.tf[o.term] = (d.tf[o.term] || 0) + 1;
+    if (!(o.term in d.first)) d.first[o.term] = k;
+    d.len++;
+  });
+  const active = docs.filter(d => d.len > 0);
+  const df = {};
+  active.forEach(d => Object.keys(d.tf).forEach(k => { df[k] = (df[k] || 0) + 1; }));
+  return docs.map(d => {
+    if (!d.len) return [];
+    const w = Object.entries(d.tf).map(([k, c]) => ({
+      term: k, c, first: d.first[k],
+      w: (c / d.len) * (Math.log((1 + active.length) / (1 + df[k])) + 1),
+    }));
+    const norm = Math.hypot(...w.map(x => x.w)) || 1;
+    w.forEach(x => { x.w /= norm; });
+    return w.sort((a, b) => (b.w - a.w) || (a.first - b.first));
+  });
+}
+function stepModel(n) {
+  const steps = [];
+  tramos.forEach((tr, t) => {
+    if (tr.start >= n) return;
+    const ms = mentions.filter(m => m.tramo === t && m.end < n);
+    const tc = {};
+    ms.forEach(m => { tc[m.topic] = (tc[m.topic] || 0) + 1; });
+    let topic = null, best = 0;
+    ms.forEach(m => { if (tc[m.topic] > best) { best = tc[m.topic]; topic = m.topic; } });
+    const cc = {};
+    ms.forEach(m => { if (m.concept) cc[m.concept] = (cc[m.concept] || 0) + 1; });
+    steps.push({ t, topic, cc, words: Math.min(tr.end, n) - tr.start, done: n >= tr.end, mk: MARKERS[tokens[tr.start].norm] || null });
+  });
+  const tf = tfidf(n);
+  steps.forEach(s => {
+    s.terms = tf[s.t];
+    s.sats = s.terms.filter(x => conceptById[x.term]).slice(0, 3);
+  });
+  const seen = {};
+  steps.forEach(s => Object.keys(s.cc).forEach(c => (seen[c] = seen[c] || []).push(s.t)));
+  const arcs = [], transversal = [];
+  for (const c in seen) {
+    const L = seen[c];
+    if (steps.length >= 3 && L.length === steps.length) { transversal.push(c); continue; }
+    for (let i = 1; i < L.length; i++) if (L[i] - L[i - 1] >= 2) arcs.push({ c, from: L[i], to: L[i - 1] });
+  }
+  steps.forEach(s => {
+    s.retoma = Object.keys(s.cc).map(c => {
+      const prev = seen[c].filter(x => x < s.t).pop();
+      return prev === undefined ? null : { c, prev };
+    }).filter(Boolean);
+    s.nuevos = Object.keys(s.cc).filter(c => seen[c][0] === s.t);
+  });
+  return { steps, arcs, transversal };
+}
+
+/* ================= helpers ================= */
+const $ = s => document.querySelector(s);
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs || {}) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const cvar = topic => `var(${topic ? topicById[topic].v : '--muted'})`;
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ================= state ================= */
+const BASE = 6; // words per second at 1×
+let cursor = reduceMotion ? N : 0;
+let playing = !reduceMotion;
+let speed = 1;
+let holdUntil = performance.now() + 700;
+let sel = null; // {type: 'concept'|'topic'|'step', id}
+let view = 'conceptos';
+let dirty = true;
+let lastN = -1;
+let scrollToSel = false;
+let model = null;
+let curves = {};
+
+function toggleSel(type, id) {
+  sel = (sel && sel.type === type && sel.id === id) ? null : { type, id };
+  scrollToSel = !!sel;
+  dirty = true;
+}
+
+/* ================= text panel ================= */
+const trace = $('#trace');
+const paraEls = [];
+const caret = document.createElement('span');
+caret.className = 'caret';
+tramos.forEach((tr, t) => {
+  const p = document.createElement('p');
+  p.className = 'para';
+  p.hidden = true;
+  for (let i = tr.start; i < tr.end; i++) {
+    const tk = tokens[i];
+    const s = document.createElement('span');
+    s.className = 'w hide';
+    const space = i < tr.end - 1 ? ' ' : '';
+    const parts = tk.text.match(/^([¿¡«"(]*)(.*?)([.,;:?!»")…]*)$/);
+    if (tk.m || (i === tr.start && MARKERS[tk.norm])) {
+      // keep punctuation outside the highlighted word
+      const core = document.createElement('span');
+      core.textContent = parts[2];
+      s.append(parts[1], core, parts[3] + space);
+      if (tk.m) {
+        core.className = 'm';
+        core.style.setProperty('--c', cvar(tk.m.topic));
+        core.addEventListener('click', () => tk.m.concept ? toggleSel('concept', tk.m.concept) : toggleSel('topic', tk.m.topic));
+      } else {
+        core.className = 'mk';
+        core.title = 'Marcador de cambio de paso';
+      }
+      tk.mel = core;
+    } else {
+      s.textContent = tk.text + space;
+    }
+    tk.el = s;
+    p.appendChild(s);
+  }
+  trace.appendChild(p);
+  paraEls.push(p);
+});
+let shown = 0;
+function updateText(n, prevN) {
+  const nearBottom = trace.scrollHeight - trace.scrollTop - trace.clientHeight < 90;
+  for (let i = 0; i < N; i++) {
+    const vis = i < n;
+    const tk = tokens[i];
+    if (vis === !tk.el.classList.contains('hide')) continue;
+    tk.el.classList.toggle('hide', !vis);
+    if (vis && tk.m && n - prevN <= 3 && i === tk.m.end) {
+      for (let k = tk.m.start; k <= tk.m.end; k++) {
+        const e = tokens[k].mel;
+        e.classList.remove('new'); void e.offsetWidth; e.classList.add('new');
+      }
+    }
+  }
+  tramos.forEach((tr, t) => { paraEls[t].hidden = tr.start >= n; });
+  if (n > 0) tokens[n - 1].el.after(caret); else trace.prepend(caret);
+  caret.classList.toggle('done', n >= N);
+  if (playing && nearBottom && n > prevN) trace.scrollTop = trace.scrollHeight;
+  shown = n;
+}
+
+function applyTextSelection() {
+  let selTramo = null, selTopic = null;
+  if (sel && sel.type === 'step') { selTramo = sel.id; }
+  if (sel && sel.type === 'topic') {
+    const c = curves[sel.id];
+    if (c && c.length) {
+      let pk = 0; c.forEach((v, i) => { if (v > c[pk]) pk = i; });
+      if (c[pk] > 0.05) selTramo = tokens[pk].tramo;
+    }
+    selTopic = sel.id;
+  }
+  const steps = model ? model.steps : [];
+  paraEls.forEach((p, t) => {
+    const st = steps.find(s => s.t === t);
+    const topic = (sel && sel.type === 'topic' && selTramo === t) ? sel.id : (st ? st.topic : null);
+    p.style.setProperty('--c', cvar(topic));
+    p.dataset.label = st ? `Paso ${t + 1} · ${st.topic ? topicById[st.topic].name : 'detectando…'}` : '';
+    p.classList.toggle('sel', selTramo === t);
+  });
+  for (const m of mentions) {
+    const on = sel && ((sel.type === 'concept' && m.concept === sel.id) || (selTopic && m.topic === selTopic));
+    for (let k = m.start; k <= m.end; k++) {
+      tokens[k].mel.classList.toggle('hl', !!on);
+      tokens[k].mel.classList.toggle('strong', !!on && sel.type === 'concept');
+    }
+  }
+  if (scrollToSel) {
+    scrollToSel = false;
+    let target = null;
+    if (selTramo !== null && !paraEls[selTramo].hidden) target = paraEls[selTramo];
+    else if (sel && sel.type === 'concept') {
+      const hit = trace.querySelector('.w:not(.hide) > .m.hl');
+      target = hit && hit.closest('.para');
+    }
+    if (target) trace.scrollTo({ top: Math.max(0, target.offsetTop - 16), behavior: reduceMotion ? 'auto' : 'smooth' });
+  }
+}
+
+/* ticker: shows the pipeline working on the latest words */
+const ticker = $('#ticker');
+const tickRows = [];
+function tickerFor(i) {
+  const tk = tokens[i];
+  if (!tk) return null;
+  const m = tk.m;
+  if (m) {
+    if (i !== m.end) return null;
+    const lemma = m.start !== m.end ? m.form : tk.lemma;
+    const target = m.concept ? conceptById[m.concept].name : `tema ${topicById[m.topic].name}`;
+    const via = lemma !== m.form ? ` → ${esc(lemma)}` : '';
+    return { c: cvar(m.topic), html: `«${esc(m.form)}»${via} → <em>${esc(target)}</em>` };
+  }
+  if (i === tramos[tk.tramo].start && MARKERS[tk.norm]) {
+    return { c: 'var(--muted)', html: `«${esc(tk.norm)}» → <em>marcador · nuevo paso</em>` };
+  }
+  if (!tk.norm) return null;
+  if (STOP.has(tk.lemma) || tk.lemma.length <= 2) return { c: 'var(--muted)', html: `«${esc(tk.norm)}» → descartada (stopword)` };
+  const via = tk.lemma !== tk.norm ? ` → ${esc(tk.lemma)}` : '';
+  return { c: 'var(--muted)', html: `«${esc(tk.norm)}»${via} → término TF-IDF` };
+}
+function updateTicker(n, prevN) {
+  if (n < prevN || n - prevN > 6) tickRows.length = 0;
+  for (let i = Math.max(prevN, n - 6, 0); i < n; i++) {
+    const r = tickerFor(i);
+    if (r) tickRows.unshift(r);
+  }
+  tickRows.length = Math.min(tickRows.length, 3);
+  ticker.innerHTML = tickRows.map(r => `<div style="--c:${r.c}">${r.html}</div>`).join('') ||
+    '<div>Esperando texto…</div>';
+}
+
+/* ================= concept map ================= */
+const map = $('#map');
+const gEdges = el('g', {}, map);
+const gNodes = el('g', {}, map);
+const ALL_PAIRS = Object.keys(pairCounts(N + 1));
+const edgeEls = {};
+ALL_PAIRS.forEach(k => {
+  const [a, b] = k.split('|');
+  const ta = conceptById[a].topic, tb = conceptById[b].topic;
+  const line = el('line', { class: 'edge', 'stroke-width': 0 }, gEdges);
+  line.style.setProperty('--c', ta === tb ? cvar(ta) : 'var(--link)');
+  edgeEls[k] = { line, a, b, w: 0, tw: 0 };
+});
+const nodeEls = {};
+CONCEPTS.forEach((c, i) => {
+  const g = el('g', { class: 'node', tabindex: '0', role: 'button', 'aria-label': c.name }, gNodes);
+  g.style.setProperty('--c', cvar(c.topic));
+  const pulse = el('circle', { class: 'pulse', r: 1 }, g);
+  const body = el('circle', { class: 'body', r: 0 }, g);
+  const label = el('text', { class: 'lbl', 'text-anchor': 'middle', dy: '0.35em' }, g);
+  label.textContent = c.name;
+  nodeEls[c.id] = { g, pulse, body, label, r: 0, tr: 0, count: 0, phase: i * 1.73, x: c.x, y: c.y };
+  g.addEventListener('click', () => toggleSel('concept', c.id));
+  g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSel('concept', c.id); } });
+});
+const rFor = cnt => 22 + 17 * Math.sqrt(cnt);
+
+function focusSet(pc) {
+  if (!sel) return null;
+  if (sel.type === 'concept') {
+    const s = new Set([sel.id]);
+    for (const k in pc) { const [a, b] = k.split('|'); if (a === sel.id) s.add(b); if (b === sel.id) s.add(a); }
+    return s;
+  }
+  if (sel.type === 'topic') return new Set(CONCEPTS.filter(c => c.topic === sel.id).map(c => c.id));
+  if (sel.type === 'step') {
+    const st = model && model.steps.find(s => s.t === sel.id);
+    return new Set(st ? Object.keys(st.cc) : []);
+  }
+  return null;
+}
+
+function updateMap(n, prevN, counts, pc) {
+  const focus = focusSet(pc);
+  CONCEPTS.forEach(c => {
+    const ne = nodeEls[c.id];
+    const cnt = counts[c.id] || 0;
+    ne.tr = cnt ? rFor(cnt) : 0;
+    if (cnt > ne.count && n - prevN <= 3 && n > prevN) {
+      ne.pulse.classList.remove('go'); void ne.pulse.getBoundingClientRect(); ne.pulse.classList.add('go');
+    }
+    ne.count = cnt;
+    const fs = Math.min(13 + ne.tr * 0.12, (1.72 * ne.tr) / (0.56 * c.name.length));
+    ne.label.setAttribute('font-size', fs.toFixed(1));
+    ne.g.classList.toggle('sel', !!sel && sel.type === 'concept' && sel.id === c.id);
+    ne.g.classList.toggle('dim', !!focus && !focus.has(c.id));
+    ne.g.setAttribute('aria-label', `${c.name}: ${cnt} menciones`);
+    ne.g.style.pointerEvents = cnt ? '' : 'none';
+  });
+  for (const k in edgeEls) {
+    const e = edgeEls[k];
+    const cnt = pc[k] || 0;
+    e.tw = cnt ? 1.6 + 2.2 * cnt : 0;
+    const active = sel && sel.type === 'concept' ? (e.a === sel.id || e.b === sel.id) : (focus ? focus.has(e.a) && focus.has(e.b) : true);
+    e.line.classList.toggle('dim', !!focus && !active);
+    e.line.classList.toggle('on', !!focus && active);
+  }
+  // info line
+  const info = $('#map-info');
+  if (!sel) { info.textContent = 'Selecciona un término para ver sus menciones.'; return; }
+  if (sel.type === 'concept') {
+    const c = conceptById[sel.id];
+    const ms = mentions.filter(m => m.concept === sel.id && m.end < n);
+    const forms = [...new Set(ms.map(m => m.form))];
+    const tr = [...new Set(ms.map(m => m.tramo + 1))];
+    const co = Object.entries(pc).filter(([k]) => k.split('|').includes(sel.id))
+      .sort((a, b) => b[1] - a[1]).map(([k]) => conceptById[k.split('|').find(x => x !== sel.id)].name);
+    info.innerHTML = `<span class="sw" style="--c:${cvar(c.topic)}">${esc(c.name)}</span> · <b>${ms.length}</b> ${ms.length === 1 ? 'mención' : 'menciones'}` +
+      (tr.length ? ` en ${tr.length === 1 ? 'el tramo' : 'los tramos'} ${tr.join(', ')}` : '') +
+      (forms.length ? ` · formas: ${forms.map(f => `«${esc(f)}»`).join(', ')}` : '') +
+      (co.length ? ` · coaparece con ${co.map(esc).join(', ')}` : '');
+  } else if (sel.type === 'topic') {
+    const t = topicById[sel.id];
+    const ms = mentions.filter(m => m.topic === sel.id && m.end < n);
+    info.innerHTML = `<span class="sw" style="--c:${cvar(sel.id)}">${esc(t.name)}</span> · <b>${ms.length}</b> menciones del tema · conceptos: ${CONCEPTS.filter(c => c.topic === sel.id).map(c => esc(c.name)).join(', ')}`;
+  } else {
+    const st = model.steps.find(s => s.t === sel.id);
+    info.innerHTML = `<b>Paso ${sel.id + 1}</b>${st && st.topic ? ` · <span class="sw" style="--c:${cvar(st.topic)}">${esc(topicById[st.topic].name)}</span>` : ''} · conceptos del paso resaltados`;
+  }
+}
+
+function animateMap(time, dt) {
+  const k = Math.min(1, dt * 7);
+  const pos = {};
+  CONCEPTS.forEach(c => {
+    const ne = nodeEls[c.id];
+    ne.r += (ne.tr - ne.r) * k;
+    if (Math.abs(ne.tr - ne.r) < 0.05) ne.r = ne.tr;
+    const amp = reduceMotion ? 0 : 3.5;
+    const x = c.x + amp * Math.sin(time * 0.00055 + ne.phase);
+    const y = c.y + amp * Math.cos(time * 0.00047 + ne.phase * 1.3);
+    pos[c.id] = [x, y];
+    ne.g.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
+    ne.body.setAttribute('r', Math.max(0, ne.r).toFixed(1));
+    ne.pulse.setAttribute('r', Math.max(1, ne.r).toFixed(1));
+    ne.label.setAttribute('opacity', ne.tr ? Math.max(0, Math.min(1, (ne.r / ne.tr - 0.55) / 0.35)).toFixed(2) : 0);
+  });
+  for (const key in edgeEls) {
+    const e = edgeEls[key];
+    e.w += (e.tw - e.w) * k;
+    const [x1, y1] = pos[e.a], [x2, y2] = pos[e.b];
+    e.line.setAttribute('x1', x1.toFixed(1)); e.line.setAttribute('y1', y1.toFixed(1));
+    e.line.setAttribute('x2', x2.toFixed(1)); e.line.setAttribute('y2', y2.toFixed(1));
+    e.line.setAttribute('stroke-width', Math.max(0, e.w).toFixed(2));
+  }
+}
+
+/* ================= topic chart ================= */
+const chart = $('#chart');
+const CX0 = 58, CX1 = 972, CY0 = 14, CY1 = 190;
+const xs = i => CX0 + (i / (N - 1)) * (CX1 - CX0);
+let YMAX = 1;
+TOPICS.forEach(t => { curve(t.id, N).forEach(v => { if (v > YMAX) YMAX = v; }); });
+YMAX = Math.ceil(YMAX + 0.15);
+const ys = v => CY1 - (v / YMAX) * (CY1 - CY0);
+
+const gGrid = el('g', {}, chart);
+for (let v = 0; v <= YMAX; v++) {
+  el('line', { class: 'c-grid', x1: CX0, x2: CX1, y1: ys(v), y2: ys(v) }, gGrid);
+  const tx = el('text', { class: 'c-axis', x: CX0 - 12, y: ys(v), 'text-anchor': 'end', dy: '0.35em' }, gGrid);
+  tx.textContent = v;
+}
+const yt = el('text', { class: 'c-ytitle', transform: `translate(16 ${(CY0 + CY1) / 2}) rotate(-90)`, 'text-anchor': 'middle' }, gGrid);
+yt.textContent = 'Menciones';
+const XT = tramos.map((tr, t) => ({ i: tr.start, label: t === 0 ? 'Inicio' : `Tramo ${t + 1}` }));
+XT.push({ i: N - 1, label: 'Texto recibido' });
+XT.forEach((x, k) => {
+  if (k > 0 && k < XT.length - 1) el('line', { class: 'c-tramo', x1: xs(x.i), x2: xs(x.i), y1: CY0, y2: CY1 }, gGrid);
+  const tx = el('text', { class: 'c-axis', x: xs(x.i), y: CY1 + 26, 'text-anchor': k === 0 ? 'start' : (k === XT.length - 1 ? 'end' : 'middle') }, gGrid);
+  tx.textContent = x.label;
+});
+const band = el('rect', { class: 'c-band', y: CY0, height: CY1 - CY0, width: 0, x: 0 }, chart);
+const gAreas = el('g', {}, chart);
+const areaEls = {}, lineEls = {};
+TOPICS.forEach(t => {
+  areaEls[t.id] = el('path', { class: 'c-area' }, gAreas);
+  areaEls[t.id].style.setProperty('--c', cvar(t.id));
+});
+TOPICS.forEach(t => {
+  lineEls[t.id] = el('path', { class: 'c-line' }, gAreas);
+  lineEls[t.id].style.setProperty('--c', cvar(t.id));
+});
+const nowLine = el('line', { class: 'c-now', y1: CY0, y2: CY1 }, chart);
+const rug = el('g', { class: 'c-rug' }, chart);
+const hoverLine = el('line', { class: 'c-hover', y1: CY0, y2: CY1, visibility: 'hidden' }, chart);
+const peak = el('g', { class: 'c-peak', visibility: 'hidden' }, chart);
+const peakLine = el('line', {}, peak);
+const peakDot = el('circle', { r: 6 }, peak);
+const peakBox = el('rect', { rx: 7, height: 26 }, peak);
+const peakText = el('text', { 'text-anchor': 'middle' }, peak);
+
+const legend = $('#legend');
+const legendBtns = {};
+TOPICS.forEach(t => {
+  const b = document.createElement('button');
+  b.style.setProperty('--c', cvar(t.id));
+  b.setAttribute('aria-pressed', 'false');
+  b.innerHTML = `<span class="dot"></span>${esc(t.name)}`;
+  b.addEventListener('click', () => toggleSel('topic', t.id));
+  legend.appendChild(b);
+  legendBtns[t.id] = b;
+});
+
+function updateChart(n) {
+  TOPICS.forEach(t => { curves[t.id] = curve(t.id, n); });
+  TOPICS.forEach(t => {
+    const c = curves[t.id];
+    if (n < 2) { areaEls[t.id].setAttribute('d', ''); lineEls[t.id].setAttribute('d', ''); return; }
+    let line = '';
+    for (let i = 0; i < n; i++) line += (i ? 'L' : 'M') + xs(i).toFixed(1) + ',' + ys(c[i]).toFixed(1);
+    lineEls[t.id].setAttribute('d', line);
+    areaEls[t.id].setAttribute('d', `M${xs(0)},${CY1}L` + line.slice(1) + `L${xs(n - 1).toFixed(1)},${CY1}Z`);
+    const on = sel && sel.type === 'topic' && sel.id === t.id;
+    const dim = sel && sel.type === 'topic' && !on;
+    areaEls[t.id].classList.toggle('on', !!on); lineEls[t.id].classList.toggle('on', !!on);
+    areaEls[t.id].classList.toggle('dim', !!dim); lineEls[t.id].classList.toggle('dim', !!dim);
+    legendBtns[t.id].setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  if (n >= 1 && n < N) {
+    nowLine.setAttribute('x1', xs(n - 1)); nowLine.setAttribute('x2', xs(n - 1)); nowLine.setAttribute('visibility', 'visible');
+  } else nowLine.setAttribute('visibility', 'hidden');
+
+  // rug: mention positions of the selected concept
+  rug.innerHTML = '';
+  if (sel && sel.type === 'concept') {
+    rug.style.setProperty('--c', cvar(conceptById[sel.id].topic));
+    mentions.filter(m => m.concept === sel.id && m.end < n).forEach(m => {
+      el('line', { x1: xs(m.start), x2: xs(m.start), y1: CY1 - 10, y2: CY1 }, rug);
+    });
+  }
+
+  // band / peak
+  let bandT = null, bandC = null;
+  if (sel && sel.type === 'step' && sel.id < tramos.length) { bandT = sel.id; const st = model.steps.find(s => s.t === sel.id); bandC = st ? st.topic : null; }
+  peak.setAttribute('visibility', 'hidden');
+  if (sel && sel.type === 'topic' && n > 1) {
+    const c = curves[sel.id];
+    let pk = 0; c.forEach((v, i) => { if (v > c[pk]) pk = i; });
+    if (c[pk] > 0.05) {
+      const tr = tokens[pk].tramo;
+      bandT = tr; bandC = sel.id;
+      peak.style.setProperty('--c', cvar(sel.id));
+      const px = xs(pk), py = ys(c[pk]);
+      peakLine.setAttribute('x1', px); peakLine.setAttribute('x2', px);
+      peakLine.setAttribute('y1', CY1); peakLine.setAttribute('y2', py);
+      peakDot.setAttribute('cx', px); peakDot.setAttribute('cy', py);
+      const label = `${topicById[sel.id].name} · Tramo ${tr + 1}`;
+      peakText.textContent = label;
+      const w = (peakText.getComputedTextLength() || label.length * 7.4) + 22;
+      const bx = Math.min(CX1 - w, Math.max(CX0, px - w / 2));
+      const by = Math.max(0, py - 40);
+      peakBox.setAttribute('x', bx); peakBox.setAttribute('y', by); peakBox.setAttribute('width', w);
+      peakText.setAttribute('x', bx + w / 2); peakText.setAttribute('y', by + 17.5);
+      peak.setAttribute('visibility', 'visible');
+    }
+  }
+  if (bandT !== null && tramos[bandT].start < n) {
+    const tr = tramos[bandT];
+    const x0 = xs(tr.start), x1 = xs(Math.min(tr.end - 1, n - 1));
+    band.setAttribute('x', x0); band.setAttribute('width', Math.max(0, x1 - x0));
+    band.style.setProperty('--c', cvar(bandC));
+  } else band.setAttribute('width', 0);
+
+  // selection label
+  const si = $('#selinfo');
+  let name = 'ninguna', c = 'var(--fg)';
+  if (sel && sel.type === 'topic') { name = topicById[sel.id].name; c = cvar(sel.id); }
+  if (sel && sel.type === 'concept') { name = conceptById[sel.id].name; c = cvar(conceptById[sel.id].topic); }
+  if (sel && sel.type === 'step') { const st = model.steps.find(s => s.t === sel.id); name = `Paso ${sel.id + 1}`; c = cvar(st && st.topic); }
+  si.style.setProperty('--c', c);
+  si.innerHTML = `Selección: <b>${esc(name)}</b>`;
+}
+
+const tip = $('#tip');
+function chartIndex(evt) {
+  const r = chart.getBoundingClientRect();
+  const vx = ((evt.clientX - r.left) / r.width) * 1000;
+  return { vx, i: Math.round(((vx - CX0) / (CX1 - CX0)) * (N - 1)) };
+}
+chart.addEventListener('pointermove', evt => {
+  const { vx, i } = chartIndex(evt);
+  if (i < 0 || i >= shown || shown < 2) { tip.hidden = true; hoverLine.setAttribute('visibility', 'hidden'); return; }
+  hoverLine.setAttribute('x1', xs(i)); hoverLine.setAttribute('x2', xs(i)); hoverLine.setAttribute('visibility', 'visible');
+  const rows = TOPICS.map(t => ({ t, v: curves[t.id][i] || 0 })).sort((a, b) => b.v - a.v);
+  tip.innerHTML = `<div class="t-head">Tramo ${tokens[i].tramo + 1} · «${esc(tokens[i].norm)}»</div>` +
+    rows.map(r => `<div class="t-row" style="--c:${cvar(r.t.id)}"><span class="dot"></span><span>${esc(r.t.name)}</span><span>${r.v.toFixed(1)}</span></div>`).join('');
+  tip.hidden = false;
+  tip.style.left = Math.min(86, Math.max(14, vx / 10)) + '%';
+});
+chart.addEventListener('pointerleave', () => { tip.hidden = true; hoverLine.setAttribute('visibility', 'hidden'); });
+chart.addEventListener('click', evt => {
+  const { i } = chartIndex(evt);
+  if (i < 0 || i >= shown) return;
+  const best = TOPICS.map(t => ({ id: t.id, v: curves[t.id][i] || 0 })).sort((a, b) => b.v - a.v)[0];
+  if (best.v < 0.2) { sel = null; dirty = true; return; }
+  toggleSel('topic', best.id);
+});
+
+/* ================= steps graph ================= */
+const stepsSvg = $('#steps');
+const SX = [150, 390, 630, 870], SY = 140, SR = 30;
+const defs = el('defs', {}, stepsSvg);
+[...TOPICS.map(t => t.id), null].forEach(id => {
+  const mk = el('marker', { id: 'ar-' + (id || 'none'), viewBox: '0 0 10 10', refX: '8', refY: '5', markerUnits: 'userSpaceOnUse', markerWidth: '12', markerHeight: '12', orient: 'auto-start-reverse' }, defs);
+  const p = el('path', { d: 'M0,0 L10,5 L0,10 z' }, mk);
+  p.style.fill = cvar(id);
+});
+el('line', { class: 's-track', x1: SX[0], x2: SX[3], y1: SY, y2: SY }, stepsSvg);
+const gArcs = el('g', {}, stepsSvg);
+const startDot = el('circle', { class: 's-start fade', cx: 40, cy: SY, r: 6 }, stepsSvg);
+const startLbl = el('text', { class: 's-start-lbl fade', x: 40, y: SY + 26 }, stepsSvg);
+startLbl.textContent = 'Inicio';
+const stepEls = SX.map((x, k) => {
+  const g = el('g', { class: 'fade off' }, stepsSvg);
+  const x0 = k === 0 ? 40 + 12 : SX[k - 1] + SR + 6;
+  const arrow = el('path', { class: 's-arrow', d: `M${x0},${SY} L${x - SR - 6},${SY}` }, g);
+  const mk = el('text', { class: 's-mk', x: (x0 + x - SR) / 2, y: SY - 12 }, g);
+  const sats = [[-74, 120], [0, 150], [74, 120]].map(([dx, dy]) => {
+    const link = el('line', { class: 's-link', x1: x, y1: SY + 98, x2: x + dx, y2: SY + dy }, g);
+    const sg = el('g', { class: 's-sat', transform: `translate(${x + dx},${SY + dy})`, tabindex: '0', role: 'button' }, g);
+    const c = el('circle', { r: 0 }, sg);
+    const t = el('text', { y: 0 }, sg);
+    const slot = { link, g: sg, c, t, id: null };
+    sg.addEventListener('click', () => slot.id && toggleSel('concept', slot.id));
+    sg.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && slot.id) { e.preventDefault(); toggleSel('concept', slot.id); } });
+    return slot;
+  });
+  const node = el('g', { class: 's-node', transform: `translate(${x},${SY})`, tabindex: '0', role: 'button' }, g);
+  el('circle', { class: 'halo', r: SR + 5 }, node);
+  el('circle', { class: 'core', r: SR }, node);
+  const num = el('text', { class: 'num', dy: '0.35em' }, node);
+  num.textContent = k + 1;
+  const name = el('text', { class: 's-name', x, y: SY + SR + 30 }, g);
+  const meta = el('text', { class: 's-meta', x, y: SY + SR + 50 }, g);
+  node.addEventListener('click', () => toggleSel('step', k));
+  node.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSel('step', k); } });
+  return { g, arrow, mk, sats, node, name, meta };
+});
+const arcPool = [0, 1, 2].map(() => {
+  const g = el('g', { class: 's-arc fade off' }, gArcs);
+  const path = el('path', {}, g);
+  const rect = el('rect', { rx: 6, height: 22 }, g);
+  const text = el('text', {}, g);
+  return { g, path, rect, text };
+});
+
+function updateSteps(n) {
+  const { steps, arcs, transversal } = model;
+  startDot.classList.toggle('off', n === 0);
+  startLbl.classList.toggle('off', n === 0);
+  stepEls.forEach((se, k) => {
+    const s = steps.find(x => x.t === k);
+    se.g.classList.toggle('off', !s);
+    if (!s) return;
+    const c = cvar(s.topic);
+    se.g.style.setProperty('--c', c);
+    se.arrow.setAttribute('marker-end', `url(#ar-${s.topic || 'none'})`);
+    se.mk.textContent = s.mk ? `«${s.mk.label}»` : '';
+    se.name.textContent = s.topic ? topicById[s.topic].name : 'detectando…';
+    se.meta.textContent = `tramo ${k + 1} · ${s.words} pal.`;
+    se.node.setAttribute('aria-label', `Paso ${k + 1}: ${s.topic ? topicById[s.topic].name : 'detectando'}`);
+    se.node.classList.toggle('sel', !!sel && sel.type === 'step' && sel.id === k);
+    se.node.classList.toggle('live', !s.done && !(sel && sel.type === 'step' && sel.id === k));
+    se.node.classList.toggle('dim', !!sel && sel.type === 'topic' && s.topic !== sel.id);
+    se.sats.forEach((slot, j) => {
+      const sat = s.sats[j];
+      const show = !!sat;
+      slot.g.classList.toggle('off', !show);
+      slot.link.classList.toggle('off', !show);
+      if (!show) { slot.id = null; return; }
+      const concept = conceptById[sat.term];
+      slot.id = concept.id;
+      const r = 12 + 5 * Math.sqrt(s.cc[concept.id] || 1);
+      slot.g.style.setProperty('--c', cvar(concept.topic));
+      slot.link.style.setProperty('--c', cvar(concept.topic));
+      slot.c.setAttribute('r', r.toFixed(1));
+      slot.t.setAttribute('y', (r + 16).toFixed(1));
+      slot.t.textContent = concept.name;
+      slot.g.setAttribute('aria-label', `${concept.name}, peso TF-IDF ${sat.w.toFixed(2)}`);
+      slot.g.classList.toggle('sel', !!sel && sel.type === 'concept' && sel.id === concept.id);
+      slot.g.classList.toggle('dim', !!sel && sel.type === 'concept' && sel.id !== concept.id);
+    });
+  });
+  arcPool.forEach((a, j) => {
+    const arc = arcs[j];
+    a.g.classList.toggle('off', !arc);
+    if (!arc) return;
+    const x1 = SX[arc.from], x2 = SX[arc.to];
+    const cy = SY - 140 + j * 18;
+    a.path.setAttribute('d', `M${x1},${SY - SR - 4} C${x1},${cy} ${x2},${cy} ${x2},${SY - SR - 8}`);
+    a.path.setAttribute('marker-end', `url(#ar-${conceptById[arc.c].topic})`);
+    a.g.style.setProperty('--c', cvar(conceptById[arc.c].topic));
+    const label = `retoma «${conceptById[arc.c].name}»`;
+    a.text.textContent = label;
+    const w = (a.text.getComputedTextLength() || label.length * 7.2) + 20;
+    const mx = (x1 + x2) / 2, apex = 0.25 * (SY - SR - 6) + 0.75 * cy;
+    a.rect.setAttribute('x', mx - w / 2); a.rect.setAttribute('y', apex - 11); a.rect.setAttribute('width', w);
+    a.text.setAttribute('x', mx); a.text.setAttribute('y', apex + 4.5);
+  });
+  const note = $('#steps-note');
+  const parts = [];
+  if (transversal.length) parts.push(`<b>${transversal.map(c => esc(conceptById[c].name)).join(', ')}</b> aparece en todos los pasos: es un concepto transversal, así que su peso TF-IDF por tramo es bajo.`);
+  if (arcs.length) parts.push(`Tras «Espera», el agente vuelve a <b>${esc(conceptById[arcs[0].c].name)}</b>, que había salido en el paso ${arcs[0].to + 1}.`);
+  if (!parts.length) parts.push('Haz clic en un paso para ver sus términos con más peso y el marcador que lo abrió.');
+  note.innerHTML = parts.join(' ');
+}
+
+const detail = $('#step-detail');
+let detailHTML = '';
+function updateDetail() {
+  const steps = model.steps;
+  const picked = sel && sel.type === 'step';
+  const s = picked ? steps.find(x => x.t === sel.id) : steps[steps.length - 1];
+  let html;
+  if (!s) {
+    html = '<h2>Detalle del paso</h2><p class="hint">Esperando el primer tramo de la traza…</p>';
+  } else {
+    const c = cvar(s.topic);
+    const top = s.terms.slice(0, 5);
+    const maxw = top.length ? top[0].w : 1;
+    const bars = top.map(x => {
+      const tc = conceptById[x.term] ? cvar(conceptById[x.term].topic) : 'var(--muted)';
+      return `<li style="--c:${tc}"><span>${esc(termName(x.term))}</span><span class="bar"><i style="width:${(x.w / maxw * 100).toFixed(0)}%"></i></span><b>${x.w.toFixed(2)}</b></li>`;
+    }).join('');
+    const chips = Object.entries(s.cc).sort((a, b) => b[1] - a[1]).map(([id, cnt]) =>
+      `<button class="chip" data-concept="${id}" style="--c:${cvar(conceptById[id].topic)}">${esc(conceptById[id].name)} <small>×${cnt}</small></button>`).join('');
+    const ret = s.retoma.length
+      ? s.retoma.map(r => `<button class="chip" data-concept="${r.c}" style="--c:${cvar(conceptById[r.c].topic)}">${esc(conceptById[r.c].name)} <small>paso ${r.prev + 1}</small></button>`).join('')
+      : '<p class="sd-text">Nada: todos los conceptos de este paso son nuevos.</p>';
+    html = `<div class="sd-head" style="--c:${c}">
+        <span class="sd-num">${s.t + 1}</span>
+        <div><h3>${s.topic ? esc(topicById[s.topic].name) : 'Detectando…'}</h3>
+        <p>tramo ${s.t + 1} · ${s.words} palabras${s.done ? '' : ' · en curso'}</p></div>
+        <span class="sd-tag">${picked ? 'Paso seleccionado' : 'Paso más reciente'}</span>
+      </div>
+      <div class="sd-grid">
+        <div>
+          <h4>Términos con más peso · TF-IDF del tramo</h4>
+          <ul class="bars">${bars || '<li><span>—</span></li>'}</ul>
+        </div>
+        <div>
+          <div class="sd-block" style="--c:${c}">
+            <h4>Marcador</h4>
+            <p class="sd-text">${s.mk ? `<span class="mkq">«${esc(s.mk.label)}»</span> · ${esc(s.mk.tipo)}. ${esc(s.mk.desc)}` : 'Sin marcador explícito.'}</p>
+          </div>
+          <div class="sd-block"><h4>Conceptos del paso</h4><div class="chips">${chips || '<p class="sd-text">Aún ninguno.</p>'}</div></div>
+          <div class="sd-block"><h4>Retoma de pasos anteriores</h4><div class="chips">${ret}</div></div>
+        </div>
+      </div>`;
+  }
+  if (html !== detailHTML) { detail.innerHTML = html; detailHTML = html; }
+}
+detail.addEventListener('click', e => {
+  const b = e.target.closest('[data-concept]');
+  if (b) toggleSel('concept', b.dataset.concept);
+});
+
+/* ================= controls ================= */
+const btnPlay = $('#btn-play');
+const ICONS = {
+  play: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 4.5v15l12.5-7.5z"/></svg>',
+  pause: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z"/></svg>',
+};
+let playIcon = '';
+function updatePlayBtn() {
+  const icon = playing ? 'pause' : 'play';
+  if (icon !== playIcon) { btnPlay.innerHTML = ICONS[icon]; playIcon = icon; }
+  btnPlay.setAttribute('aria-label', playing ? 'Pausar' : (cursor >= N ? 'Reproducir de nuevo' : 'Reproducir'));
+}
+btnPlay.addEventListener('click', () => {
+  if (!playing && cursor >= N) cursor = 0;
+  playing = !playing;
+  updatePlayBtn();
+});
+$('#btn-restart').addEventListener('click', () => {
+  cursor = 0; playing = true; holdUntil = performance.now() + 300; dirty = true;
+  tickRows.length = 0; trace.scrollTop = 0;
+  updatePlayBtn();
+});
+const scrub = $('#scrub');
+scrub.max = N;
+scrub.addEventListener('input', () => { cursor = +scrub.value; dirty = true; });
+document.querySelectorAll('#speed button').forEach(b => b.addEventListener('click', () => {
+  speed = +b.dataset.s;
+  document.querySelectorAll('#speed button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+}));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && sel) { sel = null; dirty = true; }
+  if (e.key === ' ' && !e.target.closest('button, input, [role="button"]')) { e.preventDefault(); btnPlay.click(); }
+});
+
+function setView(v) {
+  view = v;
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.view === v ? 'true' : 'false'));
+  $('#view-conceptos').hidden = v !== 'conceptos';
+  $('#view-pasos').hidden = v !== 'pasos';
+  $('#app').classList.toggle('v-pasos', v === 'pasos');
+  try { history.replaceState(null, '', '#' + v); } catch (e) { /* ignore */ }
+  dirty = true;
+}
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+
+// light by default (matches the reference design); the choice is remembered per browser
+const btnTheme = $('#btn-theme');
+const THEME_ICONS = {
+  dark: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
+  light: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+};
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  // show the icon of the mode you would switch to
+  btnTheme.innerHTML = THEME_ICONS[t === 'dark' ? 'light' : 'dark'];
+  btnTheme.setAttribute('aria-label', t === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+}
+let theme = 'light';
+try { theme = localStorage.getItem('medra-theme') === 'dark' ? 'dark' : 'light'; } catch (e) { /* storage unavailable */ }
+applyTheme(theme);
+btnTheme.addEventListener('click', () => {
+  theme = theme === 'dark' ? 'light' : 'dark';
+  applyTheme(theme);
+  try { localStorage.setItem('medra-theme', theme); } catch (e) { /* storage unavailable */ }
+  dirty = true;
+});
+if (location.hash === '#pasos') setView('pasos');
+
+/* ================= main loop ================= */
+const think = $('#think');
+const stats = $('#stats');
+const posEl = $('#pos');
+function derive(n, prevN) {
+  const counts = conceptCounts(n);
+  const pc = pairCounts(n);
+  model = stepModel(n);
+  if (sel && sel.type === 'step' && !model.steps.find(s => s.t === sel.id)) sel = null;
+  updateText(n, prevN);
+  updateChart(n);
+  updateMap(n, prevN, counts, pc);
+  updateSteps(n);
+  updateDetail();
+  applyTextSelection();
+  updateTicker(n, prevN);
+  scrub.value = n;
+  posEl.textContent = `${n}/${N}`;
+  const done = n >= N;
+  think.textContent = done ? 'Razonamiento recibido' : 'Pensando';
+  think.classList.toggle('live', !done && playing);
+  stats.innerHTML = `<span>palabras <b>${n}</b>/${N}</span><span>conceptos <b>${Object.keys(counts).length}</b></span><span>pasos <b>${model.steps.length}</b></span>`;
+}
+
+let lastT = performance.now();
+function frame(t) {
+  const dt = Math.min(0.1, (t - lastT) / 1000);
+  lastT = t;
+  if (playing && t > holdUntil) {
+    cursor = Math.min(N, cursor + dt * BASE * speed);
+    if (cursor >= N) { playing = false; updatePlayBtn(); dirty = true; }
+  }
+  const n = Math.floor(cursor);
+  if (n !== lastN || dirty) {
+    const prev = lastN < 0 ? 0 : lastN;
+    lastN = n; dirty = false;
+    derive(n, prev);
+  }
+  animateMap(t, dt);
+  requestAnimationFrame(frame);
+}
+updatePlayBtn();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
